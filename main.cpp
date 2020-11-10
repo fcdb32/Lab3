@@ -3,14 +3,14 @@
 
 using namespace std;
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]){
     //Инициализация
     const int N = 1024; //размерность матриц
-    int num_threads1;// число потоков
+    int num_threads;// число потоков
     cout << "Input number of threads: ";
-    cin >> num_threads1;
+    cin >> num_threads;
     omp_set_dynamic(0);//разрешить изменение числа потоков
-    omp_set_num_threads(num_threads1); //установить число потоков
+    omp_set_num_threads(num_threads); //установить число потоков
     double time1, time2;
     int i, j, r, rank, size;
     auto** A = new float*[N];
@@ -34,44 +34,129 @@ int main(int argc, char *argv[]) {
             A[i][j] = 1;
             B[i][j] = 2;
             C[i][j] = 3;
+            //Y[i][j] = 0;
         }
+    //Будем использовать 4 секции
+    //Для этого разбиваем N на 4 полуинтервала
+    int n1 = 0;
+    int n2 = N / 4;
+    int n3 = N / 2;
+    int n4 = N - n2;
+    int n5 = N;
     time1 = omp_get_wtime();
-//Y[i][j] = A[i][j] / C[i][j] + B[i][j] * (A[i][j] + C[i][j]);
-//T2 = A + C
-#pragma omp parallel private(rank, size, i, j)
+
+    //Y[i][j] = A[i][j] / C[i][j] + B[i][j] * (A[i][j] + C[i][j]);
+    //T2 = A + C
+#pragma omp parallel private(i, j)
     {
-        size = omp_get_num_threads();
-        rank = omp_get_thread_num();
-        for (i = rank*N / size; i < (rank + 1)*N / size; i++) {
-            for (j = 0; j < N; j++) {
-                T2[i][j] = A[i][j] + C[i][j];
+#pragma omp sections
+        {
+#pragma omp section
+            {
+                for (i = n1; i < n2; i++){
+                    for (j = 0; j < N; j++){
+                        T2[i][j] = A[i][j] + C[i][j];
+                    }
+                }
+            }
+#pragma omp section
+            {
+                for (i = n2; i < n3; i++){
+                    for (j = 0; j < N; j++){
+                        T2[i][j] = A[i][j] + C[i][j];
+                    }
+                }
+            }
+#pragma omp section
+            {
+                for (i = n3; i < n4; i++){
+                    for (j = 0; j < N; j++){
+                        T2[i][j] = A[i][j] + C[i][j];
+                    }
+                }
+            }
+#pragma omp section
+            {
+                for (i = n4; i < n5; i++){
+                    for (j = 0; j < N; j++){
+                        T2[i][j] = A[i][j] + C[i][j];
+                    }
+                }
             }
         }
+
     } // неявная барьерная синхронизация
-//Т1 = А/С
-//Т3 = B*(A+C)=B*T2
-//Y=A/C+B*(A+C)=T1+T3
-#pragma omp parallel private(rank, size, i, j, r)
+
+    //Т1 = А/С
+    //Т3 = B*(A+C)=B*T2
+    //Y=A/C+B*(A+C)=T1+T3
+#pragma omp parallel private(i, j, r)
     {
-        size = omp_get_num_threads();
-        rank = omp_get_thread_num();
-        for (i = rank*N / size; i < (rank + 1)*N / size; i++) {
-            for (j = 0; j < N; j++) {
-                T1[i][j] = A[i][j] / C[i][j];
-                T3[i][j] = 0;
-                for (r = 0; r < N;r++) {
+#pragma omp sections
+        {
+#pragma omp section
+            {
+                for (i = n1; i < n2; i++) {
+                    for (j = 0; j < N; j++) {
+                        T1[i][j] = A[i][j] / C[i][j];
+                        T3[i][j] = 0;
+                        for (r = 0; r < N;r++) {
+                            T3[i][j] += B[i][r] * T2[r][j];
+                        }
+                        Y[i][j] = T1[i][j] + T3[i][j];
+                    }
                 }
-                Y[i][j] = T1[i][j] + T3[i][j];
+            }
+#pragma omp section
+            {
+                for (i = n2; i < n3; i++) {
+                    for (j = 0; j < N; j++) {
+                        T1[i][j] = A[i][j] / C[i][j];
+                        T3[i][j] = 0;
+                        for (r = 0; r < N;r++) {
+                            T3[i][j] += B[i][r] * T2[r][j];
+                        }
+                        Y[i][j] = T1[i][j] + T3[i][j];
+                    }
+                }
+            }
+#pragma omp section
+            {
+                for (i = n3; i < n4; i++) {
+                    for (j = 0; j < N; j++) {
+                        T1[i][j] = A[i][j] / C[i][j];
+                        T3[i][j] = 0;
+                        for (r = 0; r < N;r++) {
+                            T3[i][j] += B[i][r] * T2[r][j];
+                        }
+                        Y[i][j] = T1[i][j] + T3[i][j];
+                    }
+                }
+            }
+#pragma omp section
+            {
+                for (i = n4; i < n5; i++) {
+                    for (j = 0; j < N; j++) {
+                        T1[i][j] = A[i][j] / C[i][j];
+                        T3[i][j] = 0;
+                        for (r = 0; r < N;r++) {
+                            T3[i][j] += B[i][r] * T2[r][j];
+                        }
+                        Y[i][j] = T1[i][j] + T3[i][j];
+                    }
+                }
             }
         }
     }
+
     time2 = omp_get_wtime();
     cout << "Time: " << time2 - time1 << endl;
     cout << "T1[0][0] = " << T1[0][0] << endl;
     cout << "T2[0][0] = " << T2[0][0] << endl;
     cout << "T3[0][0] = " << T3[0][0] << endl;
     cout << "Y[0][0] = " << Y[0][0] << endl;
-//Освобождение памяти
+
+    //Освобождение памяти
     for (i = 0; i < N; i++) {
         delete[]A[i];
         delete[]B[i];
