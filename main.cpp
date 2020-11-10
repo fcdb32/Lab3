@@ -5,14 +5,17 @@ using namespace std;
 
 int main(int argc, char* argv[]) {
     //Инициализация
+
     const int N = 1024; //размерность матриц
-    int num_threads;// число потоков
-    cout << "Input number of threads: ";
-    cin >> num_threads;
+    int num_threads = 1;// число потоков, равное числу лог. ядер
     omp_set_dynamic(0);//разрешить изменение числа потоков
     omp_set_num_threads(num_threads); //установить число потоков
+    int sch_block;//статические шаги цикла в клаузе schedule
+    cout << "Input size of schedule block: ";
+    cin >> sch_block;
+
     double time1, time2;
-    int i, j, r;
+    int i, j, r, rank, size;
     auto** A = new float*[N];
     auto** B = new float*[N];
     auto** C = new float*[N];
@@ -39,19 +42,20 @@ int main(int argc, char* argv[]) {
     time1 = omp_get_wtime();
 
     //Y[i][j] = A[i][j] / C[i][j] + B[i][j] * (A[i][j] + C[i][j]);
-    //T2 = A + B
-#pragma omp parallel for private(j) //schedule(static,N/4)
+    //T2 = A + C
+#pragma omp parallel for private(j) schedule (static, sch_block)
     for (i = 0; i < N; i++) {
         for (j = 0; j < N; j++) {
             T2[i][j] = A[i][j] + C[i][j];
         }
     }
+
     // неявная барьерная синхронизация
 
     //Т1 = А/С
     //Т3 = B*(A+C)=B*T2
     //Y=A/C+B*(A+C)=T1+T3
-#pragma omp parallel for private(j, r)//schedule(static,N/4)
+#pragma omp parallel for private(j, r) schedule (static, sch_block)//schedule(static,N/4)
     for (i = 0; i < N; i++) {
         for (j = 0; j < N; j++) {
             T1[i][j] = A[i][j] / C[i][j];
@@ -62,7 +66,6 @@ int main(int argc, char* argv[]) {
             Y[i][j] = T1[i][j] + T3[i][j];
         }
     }
-
 
     time2 = omp_get_wtime();
     cout << "Time: " << time2 - time1 << endl;
